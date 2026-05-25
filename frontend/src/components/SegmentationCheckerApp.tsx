@@ -100,6 +100,7 @@ const buttonGuide = [
   ['Inspect', 'Preview detected files, channels, and row counts before loading.'],
   ['Load', 'Load the selected output directory and restore saved reviews.'],
   ['Bulk review', 'Open grouped annotation controls for every active filter match.'],
+  ['Back', 'Return to the most recently reviewed cell so you can change a mistaken accept/reject without searching.'],
   ['Next', 'Move to the next cell in the current page.'],
 ];
 
@@ -159,6 +160,7 @@ export function SegmentationCheckerApp() {
   const [inspectResult, setInspectResult] = useState<InspectDatasetResponse | null>(null);
   const [cellsResponse, setCellsResponse] = useState<CellsResponse | null>(null);
   const [selectedCell, setSelectedCell] = useState<CellItem | null>(null);
+  const [reviewHistory, setReviewHistory] = useState<CellItem[]>([]);
   const [draftNote, setDraftNote] = useState('');
 
   const [outputDir, setOutputDir] = useState('');
@@ -298,6 +300,7 @@ export function SegmentationCheckerApp() {
       });
       setConfigState(nextConfig);
       setShowSetup(false);
+      setReviewHistory([]);
       await loadSummary();
       await loadCells();
     } catch (err) {
@@ -317,6 +320,7 @@ export function SegmentationCheckerApp() {
       setOutputDir(nextConfig.output_dir ?? '');
       setMaskChannelIndex(nextConfig.mask_channel_index ?? 1);
       setShowSetup(false);
+      setReviewHistory([]);
       await loadSummary();
       await loadCells();
     } catch (err) {
@@ -337,6 +341,7 @@ export function SegmentationCheckerApp() {
           training_bin: trainingBin,
           note: draftNote,
         });
+        setReviewHistory((current) => [updated, ...current.filter((cell) => cell.id !== updated.id)].slice(0, 25));
         setSelectedCell(updated);
         setCellsResponse((current) => {
           if (!current) return current;
@@ -452,6 +457,13 @@ export function SegmentationCheckerApp() {
   const pageStart = cellsResponse && cellsResponse.total > 0 ? pageOffset + 1 : 0;
   const pageEnd = cellsResponse ? Math.min(pageOffset + cellsResponse.shown, cellsResponse.total) : 0;
   const hasPreviousPage = pageOffset > 0;
+  const previousReviewedCell = reviewHistory[0] ?? null;
+  const returnToPreviousReview = () => {
+    if (!previousReviewedCell) return;
+    setReviewHistory(([, ...remaining]) => remaining);
+    setSelectedCell(previousReviewedCell);
+    setActiveView('single');
+  };
   const hasNextPage = cellsResponse ? pageOffset + cellsResponse.shown < cellsResponse.total : false;
   const selectedMaskLabel =
     selectedCell?.mask_channel_name ??
@@ -1022,6 +1034,16 @@ export function SegmentationCheckerApp() {
                 )}
 
                 <div className="action-row">
+                  <button
+                    className="action-button back"
+                    type="button"
+                    onClick={returnToPreviousReview}
+                    disabled={isSaving || !previousReviewedCell}
+                    title={previousReviewedCell ? `Return to ${previousReviewedCell.id}` : 'No reviewed cells yet'}
+                  >
+                    <ChevronLeft size={16} />
+                    <span>Back</span>
+                  </button>
                   {quickReviewActions.map((action) => (
                     <button
                       key={action.key}
@@ -1129,6 +1151,12 @@ export function SegmentationCheckerApp() {
               <div className="detail-empty">
                 <ImageIcon size={42} />
                 <strong>Select a cell</strong>
+                {previousReviewedCell && (
+                  <button className="secondary-button" type="button" onClick={returnToPreviousReview} disabled={isSaving}>
+                    <ChevronLeft size={16} />
+                    <span>Back to {previousReviewedCell.id}</span>
+                  </button>
+                )}
               </div>
             )}
           </section>

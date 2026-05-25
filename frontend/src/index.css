@@ -670,6 +670,11 @@ label span {
   padding: 0 11px;
 }
 
+.action-button.back {
+  border-color: var(--border);
+  background: #111820;
+}
+
 .action-button.accept {
   border-color: rgba(86, 209, 155, 0.3);
   background: rgba(86, 209, 155, 0.12);
