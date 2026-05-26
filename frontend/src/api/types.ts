@@ -6,13 +6,7 @@ export type ReviewStatus =
   | 'rejected'
   | 'training_candidate';
 
-export type TrainingBin =
-  | 'none'
-  | 'v_snap'
-  | 'clean_training'
-  | 'hard_negative'
-  | 'needs_resegmentation'
-  | 'out_of_focus';
+export type TrainingBin = string;
 
 export type MetadataValue = string | number | boolean | null | MetadataValue[] | { [key: string]: MetadataValue };
 

@@ -20,7 +20,7 @@ The mask view is detected from the crop TIFF metadata. The app first uses `Info.
 - `Split needed`: legacy status for one mask likely containing multiple cells. It is available in filters and bulk status, but no longer has a one-click cell button.
 - `Merge needed`: legacy status for one cell split across masks. It is available in filters and bulk status, but no longer has a one-click cell button.
 - `Reject`: crop is not useful for correction or training.
-- `V-snap`: mark the selected cell as a training candidate in the V-snap bin.
+- `Custom quick bin`: optional reviewer-defined button with a custom label, status, and training bin.
 - `Out of focus`: mark the selected cell as rejected and put it in the out-of-focus bin.
 
 ## Buttons and Workflow
@@ -31,9 +31,11 @@ The mask view is detected from the crop TIFF metadata. The app first uses `Info.
 - `Refresh`: reload counts and the active filtered cell list.
 - `Export`: download review annotations merged with metadata.
 - `Docs`: open the in-app reference for review labels, filters, buttons, and metadata.
-- `Accept`, `Reject`, `V-snap`, `Out of focus`: save the corresponding review status/bin for the selected cell.
+- `Accept`, `Reject`, `Out of focus`: save the corresponding review status/bin for the selected cell.
+- `Back`: return to the most recently reviewed cell so a mistaken accept/reject can be changed without searching accepted/rejected filters.
 - `Next`: move to the next cell in the current page.
 - `Bulk review`: open the bulk page with counts, bulk controls, and the action guide.
+- `Show custom quick bin button`: in the Training bin panel, enable a reviewer-defined quick action such as `borderline_non_cell`, `doublet`, or any other custom bin.
 
 ## Filters
 

@@ -68,7 +68,34 @@ const statusOptions: Array<{ value: ReviewStatus | 'all'; label: string }> = [
   { value: 'training_candidate', label: 'Training' },
 ];
 
-const binOptions: Array<{ value: TrainingBin | 'all'; label: string }> = [
+type BinOption = { value: TrainingBin | 'all'; label: string };
+
+type CustomQuickAction = {
+  enabled: boolean;
+  label: string;
+  trainingBin: TrainingBin;
+  status: ReviewStatus;
+};
+
+const CUSTOM_QUICK_ACTION_STORAGE_KEY = 'segmentation-checker.customQuickAction';
+
+const defaultCustomQuickAction: CustomQuickAction = {
+  enabled: false,
+  label: 'V-snap',
+  trainingBin: 'v_snap',
+  status: 'training_candidate',
+};
+
+const reviewStatusValues = new Set<ReviewStatus>([
+  'unreviewed',
+  'accepted',
+  'split_needed',
+  'merge_needed',
+  'rejected',
+  'training_candidate',
+]);
+
+const binOptions: BinOption[] = [
   { value: 'all', label: 'All bins' },
   { value: 'none', label: 'No bin' },
   { value: 'v_snap', label: 'V-snap' },
@@ -83,7 +110,7 @@ const reviewGuide = [
   ['Split needed', 'Legacy status for one mask containing more than one cell; available in filters and bulk status.'],
   ['Merge needed', 'Legacy status for one cell split across masks; available in filters and bulk status.'],
   ['Reject', 'Crop should not be used for correction or training; stores hard_negative.'],
-  ['V-snap action', 'Marks the cell as a training candidate in the V-snap bin.'],
+  ['Custom bin action', 'Optional quick button for a reviewer-defined label, status, and training bin.'],
   ['Out of focus', 'Marks the cell as rejected and stores it in the out-of-focus bin.'],
   ['V-snap bin', 'Training bin for low-eccentricity V-shaped or snapped candidates.'],
   ['Clean train', 'Training bin for clean positive examples.'],
@@ -154,6 +181,36 @@ function flagLabel(flag: string): string {
   return labels[flag] ?? flag.replaceAll('_', ' ');
 }
 
+function isReviewStatus(value: unknown): value is ReviewStatus {
+  return typeof value === 'string' && reviewStatusValues.has(value as ReviewStatus);
+}
+
+function cleanBinValue(value: string): TrainingBin {
+  return value.trim() || 'none';
+}
+
+function binLabel(value: string): string {
+  return binOptions.find((option) => option.value === value)?.label ?? value.replaceAll('_', ' ');
+}
+
+function normalizeCustomQuickAction(value: Partial<CustomQuickAction> | null | undefined): CustomQuickAction {
+  return {
+    enabled: Boolean(value?.enabled),
+    label: value?.label?.trim() || defaultCustomQuickAction.label,
+    trainingBin: cleanBinValue(value?.trainingBin ?? defaultCustomQuickAction.trainingBin),
+    status: isReviewStatus(value?.status) ? value.status : defaultCustomQuickAction.status,
+  };
+}
+
+function readCustomQuickAction(): CustomQuickAction {
+  try {
+    const saved = window.localStorage.getItem(CUSTOM_QUICK_ACTION_STORAGE_KEY);
+    return normalizeCustomQuickAction(saved ? (JSON.parse(saved) as Partial<CustomQuickAction>) : null);
+  } catch {
+    return defaultCustomQuickAction;
+  }
+}
+
 export function SegmentationCheckerApp() {
   const [config, setConfigState] = useState<DatasetConfig | null>(null);
   const [summary, setSummary] = useState<DatasetSummary>(emptySummary);
@@ -161,6 +218,7 @@ export function SegmentationCheckerApp() {
   const [cellsResponse, setCellsResponse] = useState<CellsResponse | null>(null);
   const [selectedCell, setSelectedCell] = useState<CellItem | null>(null);
   const [reviewHistory, setReviewHistory] = useState<CellItem[]>([]);
+  const [customQuickAction, setCustomQuickAction] = useState<CustomQuickAction>(() => readCustomQuickAction());
   const [draftNote, setDraftNote] = useState('');
 
   const [outputDir, setOutputDir] = useState('');
@@ -194,6 +252,26 @@ export function SegmentationCheckerApp() {
     });
     return Array.from(keys).sort((a, b) => a.localeCompare(b));
   }, [cellsResponse]);
+
+  const allBinOptions = useMemo(() => {
+    const knownValues = new Set(binOptions.map((option) => option.value));
+    const customValues = new Set<string>();
+    const addCustomValue = (value: string | null | undefined) => {
+      const cleaned = cleanBinValue(value ?? '');
+      if (!knownValues.has(cleaned)) customValues.add(cleaned);
+    };
+    cellsResponse?.items.forEach((cell) => addCustomValue(cell.training_bin));
+    addCustomValue(selectedCell?.training_bin);
+    addCustomValue(bulkBin);
+    addCustomValue(binFilter);
+    addCustomValue(customQuickAction.trainingBin);
+    return [
+      ...binOptions,
+      ...Array.from(customValues)
+        .sort((left, right) => left.localeCompare(right))
+        .map((value) => ({ value, label: binLabel(value) })),
+    ];
+  }, [binFilter, bulkBin, cellsResponse, customQuickAction.trainingBin, selectedCell]);
 
   const loadSummary = useCallback(async () => {
     const nextSummary = await getSummary();
@@ -258,6 +336,14 @@ export function SegmentationCheckerApp() {
     }
     return undefined;
   }, [config?.is_loaded, loadCells]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CUSTOM_QUICK_ACTION_STORAGE_KEY, JSON.stringify(customQuickAction));
+    } catch {
+      // Ignore storage failures; the button still works for the current session.
+    }
+  }, [customQuickAction]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -376,9 +462,9 @@ export function SegmentationCheckerApp() {
   const bulkApplyBin = useCallback(async () => {
     const targetCount = cellsResponse?.total ?? 0;
     if (targetCount === 0) return;
-    const binLabel = binOptions.find((option) => option.value === bulkBin)?.label ?? bulkBin;
+    const targetBinLabel = binLabel(bulkBin);
     const statusTargetLabel = statusOptions.find((option) => option.value === bulkStatus)?.label ?? bulkStatus;
-    const confirmed = window.confirm(`Apply ${statusTargetLabel} / ${binLabel} to ${formatCount(targetCount)} matching cells?`);
+    const confirmed = window.confirm(`Apply ${statusTargetLabel} / ${targetBinLabel} to ${formatCount(targetCount)} matching cells?`);
     if (!confirmed) return;
     const parsedNumericFilterValue = Number(numericFilterValue);
     setIsBulkSaving(true);
@@ -481,40 +567,49 @@ export function SegmentationCheckerApp() {
     trainingBin: TrainingBin;
     className: string;
     icon: ReactNode;
-  }> = [
-    {
-      key: 'accept',
-      label: 'Accept',
-      status: 'accepted',
-      trainingBin: 'none',
-      className: 'accept',
-      icon: <CheckCircle2 size={16} />,
-    },
-    {
-      key: 'v_snap',
-      label: 'V-snap',
-      status: 'training_candidate',
-      trainingBin: 'v_snap',
-      className: 'vsnap',
-      icon: <Tag size={16} />,
-    },
-    {
-      key: 'out_of_focus',
-      label: 'Out of focus',
-      status: 'rejected',
-      trainingBin: 'out_of_focus',
-      className: 'focus',
-      icon: <EyeOff size={16} />,
-    },
-    {
-      key: 'reject',
-      label: 'Reject',
-      status: 'rejected',
-      trainingBin: 'hard_negative',
-      className: 'reject',
-      icon: <Ban size={16} />,
-    },
-  ];
+  }> = useMemo(() => {
+    const actions = [
+      {
+        key: 'accept',
+        label: 'Accept',
+        status: 'accepted' as ReviewStatus,
+        trainingBin: 'none',
+        className: 'accept',
+        icon: <CheckCircle2 size={16} />,
+      },
+    ];
+    const customLabel = customQuickAction.label.trim();
+    const customBin = cleanBinValue(customQuickAction.trainingBin);
+    if (customQuickAction.enabled && customLabel && customBin !== 'none') {
+      actions.push({
+        key: 'custom_bin',
+        label: customLabel,
+        status: customQuickAction.status,
+        trainingBin: customBin,
+        className: 'custom-bin',
+        icon: <Tag size={16} />,
+      });
+    }
+    actions.push(
+      {
+        key: 'out_of_focus',
+        label: 'Out of focus',
+        status: 'rejected' as ReviewStatus,
+        trainingBin: 'out_of_focus',
+        className: 'focus',
+        icon: <EyeOff size={16} />,
+      },
+      {
+        key: 'reject',
+        label: 'Reject',
+        status: 'rejected' as ReviewStatus,
+        trainingBin: 'hard_negative',
+        className: 'reject',
+        icon: <Ban size={16} />,
+      },
+    );
+    return actions;
+  }, [customQuickAction]);
 
   return (
     <div className="app-shell">
@@ -648,7 +743,7 @@ export function SegmentationCheckerApp() {
                   setPageOffset(0);
                 }}
               >
-                {binOptions.map((option) => (
+                {allBinOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -944,7 +1039,7 @@ export function SegmentationCheckerApp() {
                     <label>
                       <span>Training bin</span>
                       <select value={bulkBin} onChange={(event) => setBulkBin(event.target.value as TrainingBin)}>
-                        {binOptions
+                        {allBinOptions
                           .filter((option) => option.value !== 'all')
                           .map((option) => (
                             <option key={option.value} value={option.value}>
@@ -1069,7 +1164,7 @@ export function SegmentationCheckerApp() {
                       <span>Training bin</span>
                     </div>
                     <select value={selectedCell.training_bin} onChange={(event) => void updateBin(event.target.value as TrainingBin)}>
-                      {binOptions
+                      {allBinOptions
                         .filter((option) => option.value !== 'all')
                         .map((option) => (
                           <option key={option.value} value={option.value}>
@@ -1077,6 +1172,74 @@ export function SegmentationCheckerApp() {
                           </option>
                         ))}
                     </select>
+                    <div className="quick-action-settings">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={customQuickAction.enabled}
+                          onChange={(event) =>
+                            setCustomQuickAction((current) => ({ ...current, enabled: event.target.checked }))
+                          }
+                        />
+                        <span>Show custom quick bin button</span>
+                      </label>
+                      {customQuickAction.enabled && (
+                        <>
+                          <div className="quick-action-grid">
+                            <label>
+                              <span>Button label</span>
+                              <input
+                                value={customQuickAction.label}
+                                onChange={(event) =>
+                                  setCustomQuickAction((current) => ({ ...current, label: event.target.value }))
+                                }
+                                onBlur={() => setCustomQuickAction((current) => normalizeCustomQuickAction(current))}
+                                placeholder="V-snap"
+                              />
+                            </label>
+                            <label>
+                              <span>Bin value</span>
+                              <input
+                                value={customQuickAction.trainingBin}
+                                onChange={(event) =>
+                                  setCustomQuickAction((current) => ({ ...current, trainingBin: event.target.value }))
+                                }
+                                onBlur={() =>
+                                  setCustomQuickAction((current) => ({
+                                    ...current,
+                                    trainingBin: cleanBinValue(current.trainingBin),
+                                  }))
+                                }
+                                placeholder="v_snap"
+                              />
+                            </label>
+                            <label>
+                              <span>Status</span>
+                              <select
+                                value={customQuickAction.status}
+                                onChange={(event) =>
+                                  setCustomQuickAction((current) => ({
+                                    ...current,
+                                    status: event.target.value as ReviewStatus,
+                                  }))
+                                }
+                              >
+                                {statusOptions
+                                  .filter((option) => option.value !== 'all' && option.value !== 'unreviewed')
+                                  .map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                          </div>
+                          <p className="quick-action-help">
+                            Add a session-specific bin such as borderline_non_cell or doublet without keeping V-snap in the main action row.
+                          </p>
+                        </>
+                      )}
+                    </div>
                     <div className="flag-list">
                       {selectedCell.flags.length === 0 ? (
                         <span className="muted">No morphology flags</span>

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 ReviewStatus = Literal[
     "unreviewed",
@@ -15,18 +15,19 @@ ReviewStatus = Literal[
     "training_candidate",
 ]
 
-TrainingBin = Literal[
-    "none",
-    "v_snap",
-    "clean_training",
-    "hard_negative",
-    "needs_resegmentation",
-    "out_of_focus",
-]
+TrainingBin = str
 
 SortDirection = Literal["asc", "desc"]
 
 DEFAULT_CROP_PATTERNS = ["*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff"]
+
+
+def _normalize_training_bin(value: Any) -> str:
+    """Normalize a stored or requested training bin label."""
+    if value is None:
+        return "none"
+    label = str(value).strip()
+    return label or "none"
 
 
 class DatasetConfigRequest(BaseModel):
@@ -108,6 +109,11 @@ class ReviewAnnotation(BaseModel):
     note: str = ""
     updated_at: Optional[str] = None
 
+    @field_validator("training_bin", mode="before")
+    @classmethod
+    def normalize_training_bin(cls, value: Any) -> str:
+        return _normalize_training_bin(value)
+
 
 class AnnotationRequest(BaseModel):
     """Request body for saving a review annotation."""
@@ -115,6 +121,11 @@ class AnnotationRequest(BaseModel):
     status: ReviewStatus
     training_bin: TrainingBin = "none"
     note: str = ""
+
+    @field_validator("training_bin", mode="before")
+    @classmethod
+    def normalize_training_bin(cls, value: Any) -> str:
+        return _normalize_training_bin(value)
 
 
 class BulkAnnotationRequest(BaseModel):
@@ -131,6 +142,11 @@ class BulkAnnotationRequest(BaseModel):
     status: ReviewStatus
     training_bin: TrainingBin = "none"
     note: str = ""
+
+    @field_validator("training_bin", mode="before")
+    @classmethod
+    def normalize_training_bin(cls, value: Any) -> str:
+        return _normalize_training_bin(value)
 
 
 class BulkAnnotationResponse(BaseModel):

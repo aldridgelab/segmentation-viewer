@@ -9,7 +9,8 @@ Desktop review app for U-Net single-cell segmentation crops and morphology table
 - Shows multi-frame 16-bit TIFF crops with per-frame channel controls read from ImageJ TIFF metadata.
 - Detects the mask plane from TIFF `Info.channels[].kind == "mask"` or `Labels`, with a configurable fallback.
 - Flags likely review targets, including low-eccentricity cells (`eccentricity <= 0.85`) for V-snapping checks.
-- Lets a reviewer mark cells as accepted, rejected, V-snap, out of focus, or other review bins.
+- Lets a reviewer mark cells as accepted, rejected, out of focus, or reviewer-defined custom review bins.
+- Provides an optional custom quick-bin button so V-snap can stay hidden during routine review.
 - Applies a training bin in bulk to the current filtered result set, such as all unreviewed V-snap candidates.
 - Includes in-app docs for review labels, filters, buttons, and crop metadata.
 - Assigns bins such as V-snap, out of focus, clean training, hard negative, and needs resegmentation.

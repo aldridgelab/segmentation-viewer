@@ -685,9 +685,9 @@ label span {
   background: rgba(239, 107, 125, 0.12);
 }
 
-.action-button.vsnap {
-  border-color: rgba(88, 166, 255, 0.32);
-  background: rgba(88, 166, 255, 0.12);
+.action-button.custom-bin {
+  border-color: rgba(242, 184, 75, 0.34);
+  background: rgba(242, 184, 75, 0.12);
 }
 
 .action-button.focus {
@@ -768,6 +768,39 @@ label span {
 .flag-list {
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.quick-action-settings {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  background: #0c1015;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-label input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+.quick-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quick-action-help {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .flag-list span {
@@ -937,7 +970,8 @@ label span {
   .detail-grid,
   .image-pair,
   .bulk-summary-grid,
-  .bulk-control-grid {
+  .bulk-control-grid,
+  .quick-action-grid {
     grid-template-columns: 1fr;
   }
 

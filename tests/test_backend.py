@@ -206,6 +206,26 @@ def test_bulk_annotations_apply_to_filtered_group(client: tuple[TestClient, Path
     assert tagged.json()["total"] == target_count
 
 
+def test_custom_training_bins_are_saved_and_filterable(client: tuple[TestClient, Path]) -> None:
+    test_client, measurements_path = client
+    output_dir = measurements_path.parent
+    assert test_client.post("/api/config", json={"output_dir": str(output_dir)}).status_code == 200
+    first_cell = test_client.get("/api/cells?limit=1").json()["items"][0]
+    custom_bin = "borderline_non_cell"
+
+    annotation_response = test_client.post(
+        f"/api/cells/{first_cell['id']}/annotation",
+        json={"status": "training_candidate", "training_bin": custom_bin, "note": "custom bin"},
+    )
+
+    assert annotation_response.status_code == 200
+    assert annotation_response.json()["training_bin"] == custom_bin
+    filtered = test_client.get(f"/api/cells?training_bin={custom_bin}")
+    assert filtered.status_code == 200
+    assert filtered.json()["total"] == 1
+    assert filtered.json()["items"][0]["id"] == first_cell["id"]
+
+
 def test_saves_annotation_exports_csv_and_renders_image(client: tuple[TestClient, Path]) -> None:
     test_client, measurements_path = client
     test_client.post(
