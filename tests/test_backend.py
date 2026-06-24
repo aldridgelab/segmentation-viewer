@@ -178,6 +178,50 @@ def test_uses_configured_crop_channel_as_mask_when_no_mask_file(tmp_path: Path) 
     assert Image.open(BytesIO(image_response.content)).size == (24, 24)
 
 
+def test_uses_row_mask_channel_index_when_fallback_is_out_of_range(tmp_path: Path) -> None:
+    checker_state.config_path = tmp_path / "checker_config.json"
+    checker_state.config = None
+    checker_state.annotations = {}
+    checker_state.records = []
+    test_client = TestClient(app)
+
+    output_dir = tmp_path / "pipeline_output"
+    crops_dir = output_dir / "passed_crops"
+    crops_dir.mkdir(parents=True)
+    cell_id = "stage2_two_channel"
+    phase = Image.new("I;16", (24, 24), 1000)
+    mask = Image.new("I;16", (24, 24), 0)
+    for x in range(8, 16):
+        for y in range(6, 18):
+            mask.putpixel((x, y), 50000)
+    crop_path = crops_dir / f"{cell_id}.tif"
+    phase.save(crop_path, save_all=True, append_images=[mask])
+    (output_dir / "stage2_data.csv").write_text(
+        f"feature,{cell_id}\nunet_confidence,0.5\n",
+        encoding="utf-8",
+    )
+    (output_dir / "stage2_mapping.csv").write_text(
+        f"Cell_ID,crop_path,mask_channel_index\n{cell_id},passed_crops/{cell_id}.tif,1\n",
+        encoding="utf-8",
+    )
+
+    config_response = test_client.post(
+        "/api/config",
+        json={"output_dir": str(output_dir), "mask_channel_index": 3},
+    )
+    assert config_response.status_code == 200
+
+    first_cell = test_client.get("/api/cells?limit=1").json()["items"][0]
+    assert first_cell["mask_url"] is not None
+    assert first_cell["mask_channel_index"] == 1
+    assert first_cell["mask_channel_name"] == "Frame 2"
+
+    image_response = test_client.get(f"/api/cells/{cell_id}/image?kind=mask")
+    assert image_response.status_code == 200
+    assert image_response.headers["content-type"] == "image/png"
+    assert Image.open(BytesIO(image_response.content)).size == (24, 24)
+
+
 def test_bulk_annotations_apply_to_filtered_group(client: tuple[TestClient, Path]) -> None:
     test_client, measurements_path = client
     output_dir = measurements_path.parent

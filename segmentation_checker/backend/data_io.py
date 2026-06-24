@@ -45,6 +45,7 @@ ECCENTRICITY_NAMES = ("eccentricity", "Eccentricity", "ecc")
 SOLIDITY_NAMES = ("solidity", "Solidity")
 AREA_NAMES = ("area", "Area", "cell_area")
 CONFIDENCE_NAMES = ("confidence", "probability", "score", "unet_confidence")
+MASK_CHANNEL_INDEX_NAMES = ("mask_channel_index",)
 OUTPUT_DATA_SUFFIX = "_data.csv"
 OUTPUT_MAPPING_SUFFIX = "_mapping.csv"
 OUTPUT_DIAGNOSTICS_SUFFIX = "_diagnostics.csv"
@@ -661,6 +662,20 @@ def metric_lookup(row: dict[str, str], names: Iterable[str]) -> float | None:
     return None
 
 
+def mask_channel_index_from_row(row: dict[str, str], channel_count: int) -> int | None:
+    for name in MASK_CHANNEL_INDEX_NAMES:
+        for column, value in row.items():
+            if column.lower() != name.lower():
+                continue
+            parsed = coerce_float(value)
+            if parsed is None:
+                continue
+            index = int(parsed)
+            if parsed == index and 0 <= index < channel_count:
+                return index
+    return None
+
+
 def flags_for_row(row: dict[str, str]) -> list[str]:
     flags: list[str] = []
     eccentricity = metric_lookup(row, ECCENTRICITY_NAMES)
@@ -705,6 +720,11 @@ def load_dataset(config: DatasetConfigRequest) -> list[CellRecord]:
             crop_path = resolve_asset_path(cell_id, crop_lookup, crop_files)
         mask_path = resolve_asset_path(cell_id, mask_lookup, mask_files)
         crop_metadata = combine_crop_metadata(crop_path)
+        mask_channel_index = (
+            crop_metadata.mask_channel_index
+            if crop_metadata.mask_channel_index is not None
+            else mask_channel_index_from_row(row, crop_metadata.frame_count)
+        )
         records.append(
             CellRecord(
                 id=cell_id,
@@ -717,7 +737,7 @@ def load_dataset(config: DatasetConfigRequest) -> list[CellRecord]:
                 channel_names=crop_metadata.channel_names,
                 channel_metadata=crop_metadata.channel_metadata,
                 image_metadata=crop_metadata.image_metadata,
-                mask_channel_index=crop_metadata.mask_channel_index,
+                mask_channel_index=mask_channel_index,
                 flags=flags_for_row(row),
             )
         )
@@ -776,6 +796,11 @@ def load_output_dataset(
             fallback_names=summary_channel_names,
             manifest_row=manifest_rows.get(cell_id),
         )
+        mask_channel_index = (
+            crop_metadata.mask_channel_index
+            if crop_metadata.mask_channel_index is not None
+            else mask_channel_index_from_row(row, crop_metadata.frame_count)
+        )
         records.append(
             CellRecord(
                 id=cell_id,
@@ -788,7 +813,7 @@ def load_output_dataset(
                 channel_names=crop_metadata.channel_names,
                 channel_metadata=crop_metadata.channel_metadata,
                 image_metadata=crop_metadata.image_metadata,
-                mask_channel_index=crop_metadata.mask_channel_index,
+                mask_channel_index=mask_channel_index,
                 flags=flags_for_row(row),
             )
         )
